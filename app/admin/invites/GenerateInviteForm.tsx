@@ -3,7 +3,7 @@
 import { useActionState } from 'react'
 import { generateInviteCode } from '@/app/actions/admin'
 
-type State = { ok: true; code: string } | { error: string } | null
+type State = { ok: boolean; code: string } | { error: string } | null
 
 export default function GenerateInviteForm({ classes }: { classes: { id: string; name: string }[] }) {
   const [state, action, pending] = useActionState<State, FormData>(
@@ -35,7 +35,7 @@ export default function GenerateInviteForm({ classes }: { classes: { id: string;
         </button>
       </form>
 
-      {state && 'ok' in state && (
+      {state && 'ok' in state && state.ok && (
         <div className="mt-3 flex items-center gap-3 bg-[#D1FAE5] border border-[#2D8A56]/30 rounded-xl px-4 py-3">
           <span className="text-sm text-[#2D8A56] font-medium">Código gerado:</span>
           <span className="font-mono font-bold text-lg tracking-widest text-[#2D8A56] bg-white rounded-lg px-3 py-1">
