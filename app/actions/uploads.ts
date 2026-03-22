@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import type { ReactionEmoji } from '@/lib/supabase/types'
 
 export async function shareUpload(uploadId: string) {
@@ -9,18 +9,21 @@ export async function shareUpload(uploadId: string) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
 
+  // Verify ownership before updating
   const { data: upload, error: fetchError } = await supabase
     .from('uploads')
     .select('id, test_id, user_id')
     .eq('id', uploadId)
-    .eq('user_id', user.id)  // only own uploads
+    .eq('user_id', user.id)
     .single()
 
   if (fetchError || !upload) return { error: 'Upload não encontrado' }
 
-  const { error } = await supabase
+  // Use admin client to bypass RLS for the update (ownership already verified above)
+  const admin = await createAdminClient()
+  const { error } = await admin
     .from('uploads')
-    .update({ is_public: true } as never)
+    .update({ is_public: true })
     .eq('id', uploadId)
 
   if (error) return { error: error.message }
@@ -35,7 +38,6 @@ export async function toggleReaction(uploadId: string, emoji: ReactionEmoji) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Não autenticado' }
 
-  // Check if reaction already exists
   const { data: existing } = await supabase
     .from('upload_reactions')
     .select('id')
@@ -45,18 +47,14 @@ export async function toggleReaction(uploadId: string, emoji: ReactionEmoji) {
     .single()
 
   if (existing) {
-    await supabase.from('upload_reactions').delete().eq('id', existing.id)
+    const { error } = await supabase.from('upload_reactions').delete().eq('id', existing.id)
+    if (error) return { error: error.message }
   } else {
-    await supabase.from('upload_reactions').insert({ upload_id: uploadId, user_id: user.id, emoji })
+    const { error } = await supabase.from('upload_reactions').insert({ upload_id: uploadId, user_id: user.id, emoji })
+    if (error) return { error: error.message }
   }
 
-  // Revalidate the pages that show this upload
-  const { data: upload } = await supabase
-    .from('uploads')
-    .select('test_id')
-    .eq('id', uploadId)
-    .single()
-
+  const { data: upload } = await supabase.from('uploads').select('test_id').eq('id', uploadId).single()
   if (upload) {
     revalidatePath(`/test/${upload.test_id}`)
     revalidatePath('/dashboard')

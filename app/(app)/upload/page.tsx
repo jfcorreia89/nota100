@@ -146,8 +146,12 @@ function UploadForm() {
               <button
                 onClick={() => {
                   startTransition(async () => {
-                    await shareUpload(result!.uploadId)
-                    setShared(true)
+                    const res = await shareUpload(result!.uploadId)
+                    if (res?.error) {
+                      setError(res.error)
+                    } else {
+                      setShared(true)
+                    }
                   })
                 }}
                 className="w-full py-3 rounded-xl font-semibold text-sm border border-[#0369A1] text-[#0369A1] bg-white"

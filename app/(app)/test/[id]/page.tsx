@@ -41,7 +41,7 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
   // AI uploads: public ones + own private ones
   const { data: rawUploads } = await supabase
     .from('uploads')
-    .select('id, test_id, file_type, ai_summary, ai_questions, is_public, created_at, profiles(name, avatar_url), upload_reactions(user_id, emoji)')
+    .select('id, user_id, test_id, file_type, ai_summary, ai_questions, is_public, created_at, profiles(name, avatar_url), upload_reactions(user_id, emoji)')
     .eq('test_id', id)
     .order('created_at', { ascending: false })
 
@@ -56,6 +56,7 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
     }
     return {
       id: u.id,
+      user_id: u.user_id,
       test_id: u.test_id,
       file_type: u.file_type as 'pdf' | 'image',
       ai_summary: u.ai_summary,

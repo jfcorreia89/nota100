@@ -3,11 +3,12 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { getInitials } from '@/lib/utils'
-import { toggleReaction } from '@/app/actions/uploads'
+import { toggleReaction, shareUpload } from '@/app/actions/uploads'
 import type { ReactionEmoji } from '@/lib/supabase/types'
 
 export interface FeedUpload {
   id: string
+  user_id?: string
   test_id: string
   file_type: 'pdf' | 'image'
   ai_summary: string | null
@@ -37,15 +38,20 @@ function timeAgo(dateStr: string): string {
 interface Props {
   upload: FeedUpload
   currentUserId: string
-  showTest?: boolean  // show test subject/topic (for dashboard global feed)
+  showTest?: boolean
 }
 
 export default function UploadFeedCard({ upload, currentUserId, showTest = false }: Props) {
   const [reactions, setReactions] = useState(upload.reactions)
-  const [, startTransition] = useTransition()
+  const [shared, setShared] = useState(upload.is_public)
+  const [shareError, setShareError] = useState<string | null>(null)
+  const [isPending, startTransition] = useTransition()
+
+  const isOwn = Boolean(upload.user_id) && upload.user_id === currentUserId
+  const name = upload.profiles?.name ?? 'Aluno'
+  const isImage = upload.file_type === 'image'
 
   function handleReaction(emoji: ReactionEmoji) {
-    // Optimistic update
     setReactions(prev =>
       prev.map(r => {
         if (r.emoji !== emoji) return r
@@ -54,16 +60,25 @@ export default function UploadFeedCard({ upload, currentUserId, showTest = false
           : { ...r, count: r.count + 1, hasReacted: true }
       })
     )
-    startTransition(() => {
-      toggleReaction(upload.id, emoji)
+    startTransition(async () => {
+      const res = await toggleReaction(upload.id, emoji)
+      if (res?.error) {
+        setReactions(upload.reactions) // revert on error
+      }
     })
   }
 
-  const isOwn = upload.profiles === null  // simplified: show "Tu" if no profile (shouldn't happen)
-  const name = upload.profiles?.name ?? 'Aluno'
-  const isImage = upload.file_type === 'image'
-  const hasReactions = reactions.some(r => r.count > 0)
-  const hasQuiz = true  // always show quiz link if upload is public
+  function handleShare() {
+    setShareError(null)
+    startTransition(async () => {
+      const res = await shareUpload(upload.id)
+      if (res?.error) {
+        setShareError(res.error)
+      } else {
+        setShared(true)
+      }
+    })
+  }
 
   return (
     <div className="bg-white border border-[#D4E8F2] rounded-2xl p-4 shadow-sm">
@@ -105,13 +120,14 @@ export default function UploadFeedCard({ upload, currentUserId, showTest = false
         </p>
       )}
 
-      {/* Reactions */}
+      {/* Reactions + quiz link */}
       <div className="flex items-center gap-2 flex-wrap">
         {reactions.map(r => (
           <button
             key={r.emoji}
             onClick={() => handleReaction(r.emoji)}
-            className="flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-medium transition-colors"
+            disabled={isPending}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-medium transition-colors disabled:opacity-50"
             style={{
               background: r.hasReacted ? '#E0F2FC' : '#F8FAFC',
               borderColor: r.hasReacted ? '#0369A1' : '#D4E8F2',
@@ -124,7 +140,7 @@ export default function UploadFeedCard({ upload, currentUserId, showTest = false
           </button>
         ))}
 
-        {hasQuiz && (
+        {shared && (
           <Link
             href={`/test/${upload.test_id}/quiz`}
             className="ml-auto text-xs text-[#0369A1] font-medium hover:underline flex-shrink-0"
@@ -133,6 +149,20 @@ export default function UploadFeedCard({ upload, currentUserId, showTest = false
           </Link>
         )}
       </div>
+
+      {/* Share button — only for owner of private uploads */}
+      {isOwn && !shared && (
+        <button
+          onClick={handleShare}
+          disabled={isPending}
+          className="w-full mt-3 py-2.5 rounded-xl font-semibold text-sm border border-[#0369A1] text-[#0369A1] bg-white disabled:opacity-50"
+        >
+          {isPending ? 'A partilhar…' : '🌍 Partilhar com a turma'}
+        </button>
+      )}
+      {shareError && (
+        <p className="text-xs text-red-500 mt-2 px-1">{shareError}</p>
+      )}
     </div>
   )
 }

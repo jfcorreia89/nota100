@@ -134,7 +134,7 @@ export default function QuizClient({ testId, testSubject, testTopic, questions, 
       questionsCorrect: correctCount,
       questionsTotal: total,
       badges: earnedBadges,
-    })
+    }).catch(() => {}) // fire-and-forget: result shown client-side regardless
   }, [phase]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Intro ────────────────────────────────────────────────────────────────
