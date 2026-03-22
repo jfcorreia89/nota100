@@ -8,7 +8,7 @@ export default async function AdminUsersPage() {
     supabase
       .from('profiles')
       .select('id, name, role, streak_count, last_active, created_at, class_members(classes(name)), uploads(count)')
-      .neq('role', 'admin')
+      .or('role.neq.admin,role.is.null')
       .order('last_active', { ascending: false, nullsFirst: false }),
     supabase.auth.admin.listUsers({ perPage: 1000 }),
   ])
