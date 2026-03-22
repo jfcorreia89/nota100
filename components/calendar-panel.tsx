@@ -1,6 +1,8 @@
 'use client'
 
-import { daysUntil, formatDate } from '@/lib/utils'
+import { useRef, useState } from 'react'
+import Link from 'next/link'
+import { daysUntil } from '@/lib/utils'
 import type { Test } from '@/lib/supabase/types'
 
 interface Props {
@@ -17,7 +19,26 @@ function getFirstDayOfMonth(year: number, month: number) {
   return new Date(year, month, 1).getDay()
 }
 
-export default function CalendarPanel({ open, tests }: Props) {
+export default function CalendarPanel({ open, onClose, tests }: Props) {
+  const [dragY, setDragY] = useState(0)
+  const startYRef = useRef<number | null>(null)
+
+  function handleTouchStart(e: React.TouchEvent) {
+    startYRef.current = e.touches[0].clientY
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (startYRef.current === null) return
+    const delta = e.touches[0].clientY - startYRef.current
+    if (delta > 0) setDragY(delta)
+  }
+
+  function handleTouchEnd() {
+    if (dragY > 80) onClose()
+    setDragY(0)
+    startYRef.current = null
+  }
+
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth()
@@ -28,7 +49,6 @@ export default function CalendarPanel({ open, tests }: Props) {
 
   const monthName = now.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })
 
-  // Dates that have tests (day of month)
   const testDays = new Set(
     tests
       .filter(t => {
@@ -50,13 +70,17 @@ export default function CalendarPanel({ open, tests }: Props) {
 
   return (
     <div
-      className="fixed left-0 right-0 bg-white rounded-t-3xl z-20 transition-transform duration-300 ease-out shadow-2xl"
+      className="fixed left-0 right-0 bg-white rounded-t-3xl z-20 shadow-2xl"
       style={{
         bottom: '80px',
-        transform: open ? 'translateY(0)' : 'translateY(100%)',
+        transform: open ? `translateY(${dragY}px)` : 'translateY(100%)',
+        transition: dragY > 0 ? 'none' : 'transform 300ms ease-out',
         maxHeight: '70vh',
         overflowY: 'auto',
       }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Handle */}
       <div className="flex justify-center pt-3 pb-1">
@@ -114,7 +138,12 @@ export default function CalendarPanel({ open, tests }: Props) {
               const isMedium = days > 5 && days <= 10
 
               return (
-                <div key={test.id} className="flex items-center gap-3">
+                <Link
+                  key={test.id}
+                  href={`/test/${test.id}`}
+                  onClick={onClose}
+                  className="flex items-center gap-3 rounded-xl -mx-1 px-1 py-0.5 active:bg-[#F0F7FC] transition-colors"
+                >
                   <div
                     className="w-10 h-10 rounded-xl flex flex-col items-center justify-center flex-shrink-0"
                     style={{
@@ -143,7 +172,7 @@ export default function CalendarPanel({ open, tests }: Props) {
                   <span className="text-xs font-semibold text-[#8AACCB] whitespace-nowrap">
                     {days === 0 ? 'Hoje' : days === 1 ? 'Amanhã' : `${days} dias`}
                   </span>
-                </div>
+                </Link>
               )
             })}
           </div>

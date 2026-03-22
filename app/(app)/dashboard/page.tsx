@@ -6,92 +6,90 @@ import { logout } from '@/app/actions/auth'
 import type { Profile, Test, TopicPrediction, TopicVote, ClassMember, ReactionEmoji } from '@/lib/supabase/types'
 import UploadFeedCard, { type FeedUpload } from '@/app/components/UploadFeedCard'
 
+function buildReactions(
+  rawReactions: { user_id: string; emoji: string }[],
+  emojis: ReactionEmoji[],
+  currentUserId: string
+) {
+  const counts: Record<string, { count: number; hasReacted: boolean }> = {}
+  for (const r of rawReactions) {
+    if (!counts[r.emoji]) counts[r.emoji] = { count: 0, hasReacted: false }
+    counts[r.emoji].count++
+    if (r.user_id === currentUserId) counts[r.emoji].hasReacted = true
+  }
+  return emojis.map(emoji => ({
+    emoji,
+    count: counts[emoji]?.count ?? 0,
+    hasReacted: counts[emoji]?.hasReacted ?? false,
+  }))
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Profile
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single() as { data: Profile | null }
-
-  // Class membership
-  const { data: membership } = await supabase
-    .from('class_members')
-    .select('class_id, classes(id, name, subject)')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single()
+  // Phase 1: profile + membership in parallel
+  const [{ data: profile }, { data: membership }] = await Promise.all([
+    supabase.from('profiles').select('*').eq('id', user.id).single() as unknown as Promise<{ data: Profile | null }>,
+    supabase.from('class_members').select('class_id, classes(id, name, subject)').eq('user_id', user.id).limit(1).single(),
+  ])
 
   if (!membership) redirect('/onboarding')
   const classId = membership.class_id
+  const today = new Date()
+  const todayStr = today.toISOString().split('T')[0]
 
-  // Next test
-  const { data: nextTest } = await supabase
-    .from('tests')
-    .select('*')
-    .eq('class_id', classId)
-    .gte('test_date', new Date().toISOString().split('T')[0])
-    .order('test_date', { ascending: true })
-    .limit(1)
-    .single() as { data: Test | null }
+  // Phase 2: next test + members + all class test IDs in parallel
+  const [{ data: nextTest }, { data: members }, { data: classTests }] = await Promise.all([
+    supabase.from('tests').select('*').eq('class_id', classId).gte('test_date', todayStr).order('test_date', { ascending: true }).limit(1).single() as unknown as Promise<{ data: Test | null }>,
+    supabase.from('class_members').select('user_id, profiles(id, name, streak_count, last_active, avatar_url)').eq('class_id', classId).limit(5) as unknown as Promise<{ data: (ClassMember & { profiles: Profile })[] | null }>,
+    supabase.from('tests').select('id').eq('class_id', classId),
+  ])
 
-  // Topic predictions + vote counts for next test
-  let predictions: (TopicPrediction & { voteCount: number; hasVoted: boolean })[] = []
-  if (nextTest) {
-    const { data: preds } = await supabase
-      .from('topic_predictions')
-      .select('*, topic_votes(user_id)')
-      .eq('test_id', nextTest.id)
-      .order('created_at', { ascending: false })
+  const testIds = classTests?.map(t => t.id) ?? []
 
-    predictions = (preds ?? []).map(p => ({
-      ...p,
-      voteCount: p.topic_votes?.length ?? 0,
-      hasVoted: p.topic_votes?.some((v: TopicVote) => v.user_id === user.id) ?? false,
-    })).sort((a, b) => b.voteCount - a.voteCount)
-  }
-
-  // Class members with profiles
-  const { data: members } = await supabase
-    .from('class_members')
-    .select('user_id, profiles(id, name, streak_count, last_active, avatar_url)')
-    .eq('class_id', classId)
-    .limit(5) as { data: (ClassMember & { profiles: Profile })[] | null }
-
-  // Feed: latest public uploads from class
-  const { data: feedUploads } = await supabase
-    .from('uploads')
-    .select('id, test_id, file_type, ai_summary, is_public, created_at, profiles(name, avatar_url), tests(subject, topic), upload_reactions(user_id, emoji)')
-    .eq('is_public', true)
-    .in('test_id',
-      (await supabase.from('tests').select('id').eq('class_id', classId)).data?.map(t => t.id) ?? []
-    )
-    .order('created_at', { ascending: false })
-    .limit(10)
+  // Phase 3: feed uploads + topic predictions in parallel
+  const [feedResult, predsResult] = await Promise.all([
+    testIds.length > 0
+      ? supabase.from('uploads')
+          .select('id, test_id, file_type, ai_summary, is_public, created_at, profiles(name, avatar_url), tests(subject, topic), upload_reactions(user_id, emoji)')
+          .eq('is_public', true)
+          .in('test_id', testIds)
+          .order('created_at', { ascending: false })
+          .limit(10)
+      : Promise.resolve({ data: null }),
+    nextTest
+      ? supabase.from('topic_predictions')
+          .select('*, topic_votes(user_id)')
+          .eq('test_id', nextTest.id)
+          .order('created_at', { ascending: false })
+      : Promise.resolve({ data: null }),
+  ])
 
   const EMOJIS: ReactionEmoji[] = ['💡', '🔥', '🙏']
-  const feedItems: FeedUpload[] = (feedUploads ?? []).map(u => ({
+  const feedItems: FeedUpload[] = ((feedResult.data ?? []) as any[]).map(u => ({
     id: u.id,
     test_id: u.test_id,
     file_type: u.file_type as 'pdf' | 'image',
     ai_summary: u.ai_summary,
     is_public: u.is_public,
     created_at: u.created_at,
-    profiles: u.profiles as unknown as { name: string; avatar_url?: string | null } | null,
-    tests: u.tests as unknown as { subject: string; topic: string } | null,
-    reactions: EMOJIS.map(emoji => ({
-      emoji,
-      count: (u.upload_reactions as { user_id: string; emoji: string }[]).filter(r => r.emoji === emoji).length,
-      hasReacted: (u.upload_reactions as { user_id: string; emoji: string }[]).some(r => r.emoji === emoji && r.user_id === user.id),
-    })),
+    profiles: u.profiles as { name: string; avatar_url?: string | null } | null,
+    tests: u.tests as { subject: string; topic: string } | null,
+    reactions: buildReactions(u.upload_reactions ?? [], EMOJIS, user.id),
   }))
 
+  const predictions: (TopicPrediction & { voteCount: number; hasVoted: boolean })[] =
+    ((predsResult.data ?? []) as any[])
+      .map(p => ({
+        ...p,
+        voteCount: p.topic_votes?.length ?? 0,
+        hasVoted: p.topic_votes?.some((v: TopicVote) => v.user_id === user.id) ?? false,
+      }))
+      .sort((a, b) => b.voteCount - a.voteCount)
+
   // Streak days (last 7 days)
-  const today = new Date()
   const streakDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today)
     d.setDate(today.getDate() - 6 + i)

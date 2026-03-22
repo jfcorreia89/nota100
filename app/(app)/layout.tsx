@@ -7,23 +7,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  // Admins skip class requirement → redirect to backoffice
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  // Fetch profile + membership in parallel
+  const [{ data: profile }, { data: membership }] = await Promise.all([
+    supabase.from('profiles').select('role').eq('id', user.id).single(),
+    supabase.from('class_members').select('class_id').eq('user_id', user.id).limit(1).single(),
+  ])
 
   if (profile?.role === 'admin') redirect('/admin')
-
-  // Check student has a class
-  const { data: membership } = await supabase
-    .from('class_members')
-    .select('class_id')
-    .eq('user_id', user.id)
-    .limit(1)
-    .single()
-
   if (!membership) redirect('/onboarding')
 
   // Fetch upcoming tests for calendar

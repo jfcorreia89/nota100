@@ -51,7 +51,13 @@ export async function analyzeStudyMaterial(
     throw err
   }
 
-  const text = result.response.text().trim()
+  let text: string
+  try {
+    text = result.response.text().trim()
+  } catch {
+    // Response blocked by safety filters or doesn't contain usable content
+    return { not_educational: true }
+  }
   // Strip markdown code fences if present
   const json = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '')
 

@@ -46,20 +46,29 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
     .order('created_at', { ascending: false })
 
   const EMOJIS: ReactionEmoji[] = ['💡', '🔥', '🙏']
-  const uploads: FeedUpload[] = (rawUploads ?? []).map(u => ({
-    id: u.id,
-    test_id: u.test_id,
-    file_type: u.file_type as 'pdf' | 'image',
-    ai_summary: u.ai_summary,
-    is_public: u.is_public,
-    created_at: u.created_at,
-    profiles: u.profiles as unknown as { name: string; avatar_url?: string | null } | null,
-    reactions: EMOJIS.map(emoji => ({
-      emoji,
-      count: (u.upload_reactions as { user_id: string; emoji: string }[]).filter(r => r.emoji === emoji).length,
-      hasReacted: (u.upload_reactions as { user_id: string; emoji: string }[]).some(r => r.emoji === emoji && r.user_id === user.id),
-    })),
-  }))
+  const uploads: FeedUpload[] = (rawUploads ?? []).map(u => {
+    const rawReactions = u.upload_reactions as { user_id: string; emoji: string }[]
+    const reactionCounts: Record<string, { count: number; hasReacted: boolean }> = {}
+    for (const r of rawReactions) {
+      if (!reactionCounts[r.emoji]) reactionCounts[r.emoji] = { count: 0, hasReacted: false }
+      reactionCounts[r.emoji].count++
+      if (r.user_id === user.id) reactionCounts[r.emoji].hasReacted = true
+    }
+    return {
+      id: u.id,
+      test_id: u.test_id,
+      file_type: u.file_type as 'pdf' | 'image',
+      ai_summary: u.ai_summary,
+      is_public: u.is_public,
+      created_at: u.created_at,
+      profiles: u.profiles as unknown as { name: string; avatar_url?: string | null } | null,
+      reactions: EMOJIS.map(emoji => ({
+        emoji,
+        count: reactionCounts[emoji]?.count ?? 0,
+        hasReacted: reactionCounts[emoji]?.hasReacted ?? false,
+      })),
+    }
+  })
 
   return (
     <div className="min-h-screen bg-[#F0F7FC] pb-24">
