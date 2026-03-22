@@ -100,3 +100,77 @@ export interface QuizAttempt {
   badges: BadgeSlug[]
   completed_at: string
 }
+
+// ── Feed event types ──────────────────────────────────────────────────────────
+
+export interface FeedActor {
+  id: string
+  name: string
+  avatar_url: string | null
+}
+
+export interface FeedReaction {
+  emoji: ReactionEmoji
+  count: number
+  hasReacted: boolean
+}
+
+export type FeedEvent =
+  | {
+      type: 'upload'
+      id: string
+      timestamp: string
+      actor: FeedActor
+      upload: {
+        id: string
+        test_id: string
+        file_type: FileType
+        ai_summary: string | null
+        is_public: boolean
+        user_id: string
+        subject: string
+        topic: string
+        reactions: FeedReaction[]
+      }
+    }
+  | {
+      type: 'test_created'
+      id: string
+      timestamp: string
+      actor: FeedActor
+      test: {
+        id: string
+        subject: string
+        topic: string
+        test_date: string
+      }
+    }
+  | {
+      type: 'quiz_completed'
+      id: string
+      timestamp: string
+      actor: FeedActor
+      quiz: {
+        test_id: string
+        subject: string
+        topic: string
+        score: number
+        questions_correct: number
+        questions_total: number
+        badges: BadgeSlug[]
+      }
+    }
+  | {
+      type: 'topic_suggested'
+      id: string
+      timestamp: string
+      actor: FeedActor
+      topic: {
+        id: string
+        topic_name: string
+        test_id: string
+        subject: string
+        vote_count: number
+        has_voted: boolean
+      }
+    }

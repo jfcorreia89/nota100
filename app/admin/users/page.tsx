@@ -34,12 +34,6 @@ export default async function AdminUsersPage() {
       return new Date(b.lastLogin).getTime() - new Date(a.lastLogin).getTime()
     })
 
-  console.log('[admin/users] profiles:', profiles?.length, 'authUsers:', authData?.users?.length, 'shown:', users.length)
-  authData?.users?.forEach(u => {
-    const role = profileMap.get(u.id)?.role
-    console.log(' ->', u.email, '| role:', role ?? '(no profile)', '| passes:', role !== 'admin')
-  })
-
   return (
     <div>
       <div className="mb-8">
