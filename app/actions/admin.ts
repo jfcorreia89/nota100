@@ -39,27 +39,31 @@ export async function createClass(formData: FormData): Promise<void> {
   revalidatePath('/admin/classes')
 }
 
-export async function generateInviteCode(formData: FormData): Promise<void> {
+export async function generateInviteCode(formData: FormData) {
   const supabase = await createAdminClient()
   const { data: { user } } = await (await createClient()).auth.getUser()
-  if (!user) return
+  if (!user) return { error: 'Não autenticado' }
 
   const classId = formData.get('class_id') as string
+  if (!classId) return { error: 'Seleciona uma turma' }
 
+  let lastError: string | null = null
   let code = randomCode()
-  let attempts = 0
-  while (attempts < 5) {
+  for (let i = 0; i < 5; i++) {
     const { error } = await supabase
       .from('invite_codes')
       .insert({ class_id: classId, code, created_by: user.id })
-    if (!error) break
+    if (!error) {
+      revalidatePath('/admin/classes')
+      revalidatePath(`/admin/classes/${classId}`)
+      revalidatePath('/admin/invites')
+      return { ok: true, code }
+    }
+    lastError = error.message
     code = randomCode()
-    attempts++
   }
 
-  revalidatePath('/admin/classes')
-  revalidatePath(`/admin/classes/${classId}`)
-  revalidatePath('/admin/invites')
+  return { error: lastError ?? 'Erro ao gerar código' }
 }
 
 export async function deactivateInviteCode(formData: FormData): Promise<void> {

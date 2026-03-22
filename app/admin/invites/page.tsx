@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
-import { generateInviteCode, deactivateInviteCode } from '@/app/actions/admin'
+import { deactivateInviteCode } from '@/app/actions/admin'
+import GenerateInviteForm from './GenerateInviteForm'
 
 export default async function AdminInvitesPage() {
   const supabase = await createAdminClient()
@@ -7,7 +8,7 @@ export default async function AdminInvitesPage() {
   const [{ data: invites }, { data: classes }] = await Promise.all([
     supabase
       .from('invite_codes')
-      .select('*, classes(name, subject), profiles!invite_codes_used_by_fkey(name)')
+      .select('*, classes(name, subject), profiles(name)')
       .order('created_at', { ascending: false }),
     supabase.from('classes').select('id, name').order('name'),
   ])
@@ -26,29 +27,7 @@ export default async function AdminInvitesPage() {
       </div>
 
       {/* Generate new code */}
-      <div className="bg-white border border-[#D4E8F2] rounded-2xl p-6 mb-8">
-        <p className="text-sm font-semibold text-[#0C2233] mb-4">Gerar novo código</p>
-        <form action={generateInviteCode} className="flex gap-3">
-          <select
-            name="class_id"
-            required
-            className="flex-1 px-4 py-2.5 rounded-xl border border-[#D4E8F2] text-sm text-[#0C2233] focus:outline-none focus:ring-2 focus:ring-[#0369A1]/30 focus:border-[#0369A1] bg-white"
-          >
-            <option value="">Selecionar turma…</option>
-            {classes?.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            className="px-5 py-2.5 rounded-xl text-white font-semibold text-sm whitespace-nowrap"
-            style={{ background: 'linear-gradient(135deg, #024F82, #0369A1)' }}
-          >
-            🎫 Gerar código
-          </button>
-        </form>
-        <p className="text-xs text-[#8AACCB] mt-2">Cada código é de uso único — fica inativo assim que um aluno o utiliza.</p>
-      </div>
+      <GenerateInviteForm classes={classes ?? []} />
 
       {/* Codes table */}
       <div className="bg-white border border-[#D4E8F2] rounded-2xl overflow-hidden">
