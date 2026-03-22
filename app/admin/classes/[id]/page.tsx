@@ -4,6 +4,11 @@ import Link from 'next/link'
 import { generateInviteCode, deactivateInviteCode } from '@/app/actions/admin'
 import { getInitials } from '@/lib/utils'
 
+async function generateInviteCodeVoid(formData: FormData): Promise<void> {
+  'use server'
+  await generateInviteCode(formData)
+}
+
 export default async function AdminClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createAdminClient()
@@ -39,7 +44,7 @@ export default async function AdminClassDetailPage({ params }: { params: Promise
         <div className="bg-white border border-[#D4E8F2] rounded-2xl p-5">
           <p className="text-[10px] font-semibold text-[#8AACCB] uppercase tracking-widest mb-3">Códigos Disponíveis</p>
           <p className="text-4xl font-black text-[#0369A1] mb-3">{availableCodes.length}</p>
-          <form action={generateInviteCode}>
+          <form action={generateInviteCodeVoid}>
             <input type="hidden" name="class_id" value={id} />
             <button
               type="submit"
