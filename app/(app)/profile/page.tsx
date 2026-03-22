@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { logout } from '@/app/actions/auth'
-import { getInitials } from '@/lib/utils'
+import AvatarUpload from '@/app/components/AvatarUpload'
 import type { BadgeSlug } from '@/lib/supabase/types'
 
 const BADGE_META: Record<BadgeSlug, { emoji: string; label: string }> = {
@@ -44,7 +44,6 @@ export default async function ProfilePage() {
   const quizCount = quizAttempts?.length ?? 0
   const bestScore = quizAttempts?.[0]?.score ?? null
 
-  // Collect unique badges across all attempts
   const allBadges = quizAttempts?.flatMap(a => a.badges as BadgeSlug[]) ?? []
   const uniqueBadges = [...new Set(allBadges)] as BadgeSlug[]
 
@@ -56,13 +55,8 @@ export default async function ProfilePage() {
 
       {/* Avatar + name */}
       <div className="flex flex-col items-center gap-3 mb-8">
-        <div
-          className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold"
-          style={{ background: 'linear-gradient(135deg, #024F82, #0369A1)' }}
-        >
-          {getInitials(profile?.name ?? 'A')}
-        </div>
-        <div className="text-center">
+        <AvatarUpload name={profile?.name ?? 'A'} avatarUrl={profile?.avatar_url ?? null} />
+        <div className="text-center mt-1">
           <p className="text-xl font-bold text-[#0C2233]">{profile?.name}</p>
           <p className="text-sm text-[#5A8AA8]">{user.email}</p>
         </div>

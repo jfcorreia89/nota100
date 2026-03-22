@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { daysUntil, formatDate, getInitials, voteLabel } from '@/lib/utils'
-import { addTopicPrediction, voteOnTopic } from '@/app/actions/tests'
+import { voteOnTopic } from '@/app/actions/tests'
+import TopicForm from './TopicForm'
 import type { TopicVote, ReactionEmoji } from '@/lib/supabase/types'
 import UploadFeedCard, { type FeedUpload } from '@/app/components/UploadFeedCard'
 
@@ -22,10 +23,10 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
 
   const days = daysUntil(test.test_date)
 
-  // Topic predictions + votes
+  // Topic predictions + votes + author
   const { data: preds } = await supabase
     .from('topic_predictions')
-    .select('*, topic_votes(user_id)')
+    .select('*, topic_votes(user_id), profiles(name, avatar_url)')
     .eq('test_id', id)
     .order('created_at', { ascending: false })
 
@@ -33,12 +34,14 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
     ...p,
     voteCount: p.topic_votes?.length ?? 0,
     hasVoted: p.topic_votes?.some((v: TopicVote) => v.user_id === user.id) ?? false,
+    authorName: (p.profiles as unknown as { name: string } | null)?.name ?? null,
+    authorAvatar: (p.profiles as unknown as { avatar_url: string | null } | null)?.avatar_url ?? null,
   })).sort((a, b) => b.voteCount - a.voteCount)
 
   // AI uploads: public ones + own private ones
   const { data: rawUploads } = await supabase
     .from('uploads')
-    .select('id, test_id, file_type, ai_summary, ai_questions, is_public, created_at, profiles(name), upload_reactions(user_id, emoji)')
+    .select('id, test_id, file_type, ai_summary, ai_questions, is_public, created_at, profiles(name, avatar_url), upload_reactions(user_id, emoji)')
     .eq('test_id', id)
     .order('created_at', { ascending: false })
 
@@ -50,7 +53,7 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
     ai_summary: u.ai_summary,
     is_public: u.is_public,
     created_at: u.created_at,
-    profiles: u.profiles as unknown as { name: string } | null,
+    profiles: u.profiles as unknown as { name: string; avatar_url?: string | null } | null,
     reactions: EMOJIS.map(emoji => ({
       emoji,
       count: (u.upload_reactions as { user_id: string; emoji: string }[]).filter(r => r.emoji === emoji).length,
@@ -90,23 +93,7 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
         </div>
 
         {/* Vote form */}
-        <form action={addTopicPrediction} className="flex gap-2 mb-3">
-          <input type="hidden" name="test_id" value={id} />
-          <input
-            name="topic_name"
-            type="text"
-            required
-            placeholder="Sugerir tópico…"
-            className="flex-1 px-3 py-2.5 rounded-xl border border-[#D4E8F2] bg-white text-[#0C2233] placeholder:text-[#8AACCB] focus:outline-none focus:ring-2 focus:ring-[#0369A1]/30 focus:border-[#0369A1] text-sm"
-          />
-          <button
-            type="submit"
-            className="px-4 py-2.5 rounded-xl text-white font-semibold text-sm"
-            style={{ background: 'linear-gradient(135deg, #024F82, #0369A1)' }}
-          >
-            +
-          </button>
-        </form>
+        <TopicForm testId={id} />
 
         {/* Prediction list */}
         <div className="space-y-2">
@@ -121,31 +108,56 @@ export default async function TestPage({ params }: { params: Promise<{ id: strin
                 Baixa: { bg: '#D1FAE5', text: '#2D8A56', dot: '#2D8A56' },
               }
               const colors = colorMap[label]
+              const timeAgo = (() => {
+                const diff = Date.now() - new Date(pred.created_at).getTime()
+                const mins = Math.floor(diff / 60000)
+                if (mins < 1) return 'agora'
+                if (mins < 60) return `há ${mins}min`
+                const h = Math.floor(mins / 60)
+                if (h < 24) return `há ${h}h`
+                return `há ${Math.floor(h / 24)}d`
+              })()
 
               return (
-                <div key={pred.id} className="bg-white border border-[#D4E8F2] rounded-2xl px-4 py-3 flex items-center gap-3 shadow-sm">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: colors.dot }} />
-                  <p className="flex-1 text-sm font-medium text-[#0C2233]">{pred.topic_name}</p>
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-md" style={{ background: colors.bg, color: colors.text }}>
-                    {label}
-                  </span>
-                  <span className="text-xs text-[#8AACCB] w-4 text-right">{pred.voteCount}</span>
-                  <form action={voteOnTopic}>
-                    <input type="hidden" name="prediction_id" value={pred.id} />
-                    <input type="hidden" name="test_id" value={id} />
-                    <button
-                      type="submit"
-                      className="w-7 h-7 rounded-lg flex items-center justify-center text-xs border transition-colors"
-                      style={{
-                        background: pred.hasVoted ? '#E0F2FC' : '#F8FAFC',
-                        borderColor: pred.hasVoted ? '#0369A1' : '#D4E8F2',
-                        color: pred.hasVoted ? '#0369A1' : '#8AACCB',
-                        fontWeight: pred.hasVoted ? 700 : 400,
-                      }}
-                    >
-                      ↑
-                    </button>
-                  </form>
+                <div key={pred.id} className="bg-white border border-[#D4E8F2] rounded-2xl px-4 py-3 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: colors.dot }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-[#0C2233]">{pred.topic_name}</p>
+                      {pred.authorName && (
+                        <p className="text-xs text-[#8AACCB] mt-0.5">
+                          {pred.authorAvatar ? (
+                            <img src={pred.authorAvatar} alt={pred.authorName} className="w-3.5 h-3.5 rounded-full object-cover inline mr-1 align-middle" />
+                          ) : (
+                            <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-[#E0F2FC] text-[8px] font-bold text-[#0369A1] mr-1 align-middle">
+                              {getInitials(pred.authorName).charAt(0)}
+                            </span>
+                          )}
+                          {pred.authorName} · {timeAgo}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-md flex-shrink-0" style={{ background: colors.bg, color: colors.text }}>
+                      {label}
+                    </span>
+                    <span className="text-xs text-[#8AACCB] w-4 text-right flex-shrink-0">{pred.voteCount}</span>
+                    <form action={voteOnTopic}>
+                      <input type="hidden" name="prediction_id" value={pred.id} />
+                      <input type="hidden" name="test_id" value={id} />
+                      <button
+                        type="submit"
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-xs border transition-colors flex-shrink-0"
+                        style={{
+                          background: pred.hasVoted ? '#E0F2FC' : '#F8FAFC',
+                          borderColor: pred.hasVoted ? '#0369A1' : '#D4E8F2',
+                          color: pred.hasVoted ? '#0369A1' : '#8AACCB',
+                          fontWeight: pred.hasVoted ? 700 : 400,
+                        }}
+                      >
+                        ↑
+                      </button>
+                    </form>
+                  </div>
                 </div>
               )
             })

@@ -58,14 +58,14 @@ export default async function DashboardPage() {
   // Class members with profiles
   const { data: members } = await supabase
     .from('class_members')
-    .select('user_id, profiles(id, name, streak_count, last_active)')
+    .select('user_id, profiles(id, name, streak_count, last_active, avatar_url)')
     .eq('class_id', classId)
     .limit(5) as { data: (ClassMember & { profiles: Profile })[] | null }
 
   // Feed: latest public uploads from class
   const { data: feedUploads } = await supabase
     .from('uploads')
-    .select('id, test_id, file_type, ai_summary, is_public, created_at, profiles(name), tests(subject, topic), upload_reactions(user_id, emoji)')
+    .select('id, test_id, file_type, ai_summary, is_public, created_at, profiles(name, avatar_url), tests(subject, topic), upload_reactions(user_id, emoji)')
     .eq('is_public', true)
     .in('test_id',
       (await supabase.from('tests').select('id').eq('class_id', classId)).data?.map(t => t.id) ?? []
@@ -81,7 +81,7 @@ export default async function DashboardPage() {
     ai_summary: u.ai_summary,
     is_public: u.is_public,
     created_at: u.created_at,
-    profiles: u.profiles as unknown as { name: string } | null,
+    profiles: u.profiles as unknown as { name: string; avatar_url?: string | null } | null,
     tests: u.tests as unknown as { subject: string; topic: string } | null,
     reactions: EMOJIS.map(emoji => ({
       emoji,
@@ -118,12 +118,20 @@ export default async function DashboardPage() {
               👋
             </button>
           </form>
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold"
-            style={{ background: 'linear-gradient(135deg, #024F82, #0369A1)' }}
-          >
-            {getInitials(profile?.name ?? 'A')}
-          </div>
+          {profile?.avatar_url ? (
+            <img
+              src={profile.avatar_url}
+              alt={profile.name}
+              className="w-9 h-9 rounded-full object-cover"
+            />
+          ) : (
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold"
+              style={{ background: 'linear-gradient(135deg, #024F82, #0369A1)' }}
+            >
+              {getInitials(profile?.name ?? 'A')}
+            </div>
+          )}
         </div>
       </div>
 
@@ -154,7 +162,6 @@ export default async function DashboardPage() {
       <div className="mx-6 mb-5">
         <div className="flex items-center justify-between mb-3">
           <span className="text-[10px] font-semibold text-[#8AACCB] uppercase tracking-widest">Próximo Teste</span>
-          <Link href="/dashboard" className="text-xs text-[#0369A1] font-medium">ver todos →</Link>
         </div>
         {nextTest ? (
           <Link href={`/test/${nextTest.id}`}>
@@ -243,12 +250,16 @@ export default async function DashboardPage() {
 
               return (
                 <div key={p.id} className={`flex items-center gap-3 px-4 py-3 ${i < members.length - 1 ? 'border-b border-[#D4E8F2]' : ''}`}>
-                  <div
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
-                    style={{ background: avatarColors[i % avatarColors.length] }}
-                  >
-                    {getInitials(p.name)}
-                  </div>
+                  {p.avatar_url ? (
+                    <img src={p.avatar_url} alt={p.name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+                  ) : (
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0"
+                      style={{ background: avatarColors[i % avatarColors.length] }}
+                    >
+                      {getInitials(p.name)}
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-[#0C2233]">{p.name}{isMe ? ' (tu)' : ''}</p>
                     <p className="text-xs text-[#5A8AA8]">{status}</p>
@@ -295,20 +306,6 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      {/* AI Upload CTA */}
-      <div className="mx-6 mb-5">
-        <Link
-          href="/upload"
-          className="bg-white border border-[#D4E8F2] rounded-2xl px-4 py-3.5 flex items-center gap-4 shadow-sm"
-        >
-          <div className="w-11 h-11 rounded-xl bg-[#E0F2FC] flex items-center justify-center text-2xl flex-shrink-0">🤖</div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-[#0C2233]">Resumo + Quiz com IA</p>
-            <p className="text-xs text-[#5A8AA8] mt-0.5">Foto ou PDF → resumo e 5 perguntas</p>
-          </div>
-          <span className="text-lg text-[#0369A1] font-bold">›</span>
-        </Link>
-      </div>
     </div>
   )
 }

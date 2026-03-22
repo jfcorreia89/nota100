@@ -13,7 +13,7 @@ export interface FeedUpload {
   ai_summary: string | null
   is_public: boolean
   created_at: string
-  profiles: { name: string } | null
+  profiles: { name: string; avatar_url?: string | null } | null
   tests?: { subject: string; topic: string } | null
   reactions: { emoji: ReactionEmoji; count: number; hasReacted: boolean }[]
 }
@@ -69,12 +69,16 @@ export default function UploadFeedCard({ upload, currentUserId, showTest = false
     <div className="bg-white border border-[#D4E8F2] rounded-2xl p-4 shadow-sm">
       {/* Header */}
       <div className="flex items-center gap-2.5 mb-3">
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg, #024F82, #0369A1)' }}
-        >
-          {getInitials(name)}
-        </div>
+        {upload.profiles?.avatar_url ? (
+          <img src={upload.profiles.avatar_url} alt={name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+        ) : (
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #024F82, #0369A1)' }}
+          >
+            {getInitials(name)}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-[#0C2233] leading-tight">{name}</p>
           {showTest && upload.tests && (

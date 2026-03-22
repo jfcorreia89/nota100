@@ -24,19 +24,39 @@ export async function createTest(formData: FormData): Promise<void> {
   redirect(`/test/${data.id}`)
 }
 
-export async function addTopicPrediction(formData: FormData): Promise<void> {
+export async function addTopicPrediction(
+  _prev: { error?: string; ok?: boolean } | null,
+  formData: FormData
+): Promise<{ error?: string; ok?: boolean }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
   const testId = formData.get('test_id') as string
-  const topicName = formData.get('topic_name') as string
+  const topicName = (formData.get('topic_name') as string).trim()
 
-  await supabase
+  if (!topicName) return { error: 'Escreve um tópico' }
+
+  // Duplicate check: same user + same topic name (case-insensitive) for this test
+  const { data: existing } = await supabase
+    .from('topic_predictions')
+    .select('id')
+    .eq('test_id', testId)
+    .eq('created_by', user.id)
+    .ilike('topic_name', topicName)
+    .limit(1)
+    .single()
+
+  if (existing) return { error: 'Já sugeriste este tópico' }
+
+  const { error } = await supabase
     .from('topic_predictions')
     .insert({ test_id: testId, topic_name: topicName, created_by: user.id })
 
+  if (error) return { error: 'Erro ao adicionar tópico' }
+
   revalidatePath(`/test/${testId}`)
+  return { ok: true }
 }
 
 export async function voteOnTopic(formData: FormData): Promise<void> {

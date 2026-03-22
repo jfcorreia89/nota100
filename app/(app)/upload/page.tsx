@@ -256,7 +256,7 @@ function UploadForm() {
 
         <button
           onClick={handleSubmit}
-          disabled={!file || loading}
+          disabled={!file || loading || !testId}
           className="w-full py-3.5 rounded-xl text-white font-semibold text-sm disabled:opacity-40 transition-opacity"
           style={{ background: 'linear-gradient(135deg, #024F82, #0369A1)' }}
         >
